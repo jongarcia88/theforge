@@ -1,0 +1,25 @@
+name: Auto Backup Google Apps Script Repo
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Archive repo
+      run: |
+        mkdir backup
+        zip -r backup/google-apps-script-backup.zip . -x "*.git*" "**/node_modules/**"
+
+    - name: Upload backup as artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: google-apps-script-backup
+        path: backup/google-apps-script-backup.zip
