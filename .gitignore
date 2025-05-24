@@ -1,0 +1,14 @@
+# Ignore clasp project binding (each dev sets this locally)
+.clasp.json
+
+# Node modules, if you install any
+node_modules/
+
+# macOS system files
+.DS_Store
+
+# Windows system files
+Thumbs.db
+
+# Log files or temporary data (if any)
+*.log
