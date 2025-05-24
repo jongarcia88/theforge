@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <style>
+      body { font-family: Arial, sans-serif; padding: 10px; }
+      button { margin: 4px 0; padding: 6px 12px; width: 100%; }
+    </style>
+  </head>
+  <body>
+    <h3>Select a CSV file to reset:</h3>
+    <div id="fileList">Loading...</div>
+    <script>
+      google.script.run.withSuccessHandler(function(files) {
+        const container = document.getElementById("fileList");
+        if (files.length === 0) {
+          container.innerHTML = "<p>✅ No processed CSV files found.</p>";
+          return;
+        }
+        container.innerHTML = "";
+        files.forEach(function(file) {
+          const btn = document.createElement("button");
+          btn.textContent = "🔁 " + file;
+          btn.onclick = function() {
+            google.script.run.withSuccessHandler(msg => {
+              alert(msg);
+              btn.remove(); // remove the button after reset
+            }).resetProcessedFlag(file);
+          };
+          container.appendChild(btn);
+        });
+      }).getProcessedCSVFiles();
+    </script>
+  </body>
+</html>

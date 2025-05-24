@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    :root {
+      --tiller-blue: #3c78d8;
+      --light-gray: #f4f4f4;
+      --border-gray: #dcdcdc;
+      --text-gray: #555;
+    }
+
+    body {
+      font-family: Roboto, Arial, sans-serif;
+      font-size: 13px;
+      background-color: #ffffff;
+      padding: 16px;
+      color: var(--text-gray);
+    }
+
+    h3 {
+      margin-top: 0;
+      color: #222;
+      font-size: 16px;
+    }
+
+    select,
+    input[type="text"],
+    input[type="checkbox"] {
+      font-size: 13px;
+      padding: 5px;
+      border: 1px solid var(--border-gray);
+      border-radius: 4px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    label {
+      display: block;
+      margin-top: 6px;
+      font-weight: 500;
+    }
+
+    .group-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .accordion {
+      background-color: var(--light-gray);
+      border: none;
+      padding: 10px;
+      margin-top: 12px;
+      width: 100%;
+      text-align: left;
+      font-weight: bold;
+      font-size: 13px;
+      border-radius: 4px;
+      cursor: pointer;
+      color: #222;
+      transition: background-color 0.2s ease-in-out;
+    }
+
+    .accordion:hover {
+      background-color: #eaeaea;
+    }
+
+    .panel {
+      display: none;
+      padding: 8px 12px;
+      background: #fff;
+      border: 1px solid var(--border-gray);
+      border-top: none;
+      border-radius: 0 0 4px 4px;
+    }
+
+    .rule {
+      border-bottom: 1px solid #eee;
+      padding: 10px 0;
+    }
+
+    .footer-buttons {
+      margin-top: 16px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      padding: 6px 12px;
+      font-size: 13px;
+      border: none;
+      border-radius: 4px;
+      background-color: var(--tiller-blue);
+      color: #fff;
+      cursor: pointer;
+      transition: background-color 0.2s ease-in-out;
+    }
+
+    button:hover {
+      background-color: #2e62b0;
+    }
+
+    .toggle-group {
+      font-size: 0.85em;
+      color: var(--tiller-blue);
+      cursor: pointer;
+      text-decoration: underline;
+    }
+
+    small {
+      font-size: 11px;
+      color: #777;
+    }
+
+    #controls {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .checkbox-label {
+      font-weight: normal;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .checkbox-label input[type="checkbox"] {
+      width: auto;
+    }
+  </style>
+</head>
+<body>
+  <h3>AutoCat Rule Helper</h3>
+
+  <div id="controls">
+    <label for="groupMode">Group by:</label>
+    <select id="groupMode" onchange="renderGrouped()">
+      <option value="merchant">🧾 Merchant Root</option>
+      <option value="category">🏷️ Category</option>
+    </select>
+
+    <label class="checkbox-label">
+      <input type="checkbox" id="cleanDescriptions" onchange="renderGrouped()" checked>
+      ✨ Clean Descriptions
+    </label>
+
+    <label class="checkbox-label">
+      <input type="checkbox" id="removeLocations" onchange="renderGrouped()" checked>
+      🗺️ Remove Location Info
+    </label>
+
+    <button id="refreshBtn" onclick="loadSuggestions()">🔄 Refresh</button>
+  </div>
+
+  <div id="rules">Loading...</div>
+
+  <div class="footer-buttons">
+    <button onclick="saveSelected()">✅ Add Selected</button>
+    <button onclick="skipSelected()">🚫 Skip Selected</button>
+    <button onclick="mergeRules()">📥 Merge Proposed → AutoCat</button>
+  </div>
+
+  <script>
+    let suggestions = [];
+
+    function getMerchantRoot(description) {
+      return (description || "").toUpperCase().split(/[ *\-]/)[0] || "Other";
+    }
+
+    function cleanDescription(text, removeLocation = true) {
+      let cleaned = (text || "")
+        .replace(/^check card purchase\s*/i, "")
+        .replace(/\b(SQ|TST)\b/gi, "")
+        .replace(/#[0-9]+/g, "")
+        .replace(/\d{5}(?:-\d{4})?/g, "")
+        .replace(/\b\d+\b/g, "")
+        .replace(/[^\w\s]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (!removeLocation) return cleaned;
+
+      const locationWords = [
+        "USA", "CANADA", "FRANCE", "GERMANY", "UK", "UNITED KINGDOM", "SPAIN", "ITALY",
+        "NETHERLANDS", "AUSTRALIA", "MEXICO", "BRAZIL", "CHINA", "JAPAN", "SINGAPORE",
+        "WA", "CA", "NY", "TX", "FL", "DC", "IL", "AZ", "NJ", "OR",
+        "SEATTLE", "MIAMI", "NEW YORK", "LONDON", "PARIS", "BERLIN", "TOKYO", "AMSTERDAM", "DUBAI", "TORONTO", "LOS ANGELES", "SAN FRANCISCO"
+      ];
+
+      const regex = new RegExp(`\\b(?:${locationWords.join("|")})\\b`, "gi");
+      return cleaned.replace(regex, "").replace(/\s+/g, " ").trim();
+    }
+
+    function loadSuggestions() {
+      const btn = document.getElementById("refreshBtn");
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "⏳ Loading…";
+      }
+
+      google.script.run.withSuccessHandler(function(data) {
+        suggestions = data.map((r, i) => ({
+          index: i,
+          originalCategory: r.category,
+          originalDescription: r.description,
+          category: r.category,
+          displayDescription: cleanDescription(r.description, true),
+          matchCount: r.matchCount,
+          matchedRule: r.matchedRule || "None",
+          checked: true
+        }));
+        renderGrouped();
+
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = "🔄 Refresh";
+        }
+      }).getSuggestedAutoCatRules();
+    }
+
+    function renderGrouped() {
+      const groupMode = document.getElementById("groupMode").value;
+      const clean = document.getElementById("cleanDescriptions").checked;
+      const removeLoc = document.getElementById("removeLocations").checked;
+      const container = document.getElementById("rules");
+      container.innerHTML = "";
+
+      if (suggestions.length === 0) {
+        container.innerHTML = "<p>No rule suggestions found 🎉</p>";
+        return;
+      }
+
+      const grouped = {};
+      suggestions.forEach(rule => {
+        rule.displayDescription = clean ? cleanDescription(rule.originalDescription, removeLoc) : rule.originalDescription;
+        const groupKey = groupMode === "category"
+          ? rule.category || "Uncategorized"
+          : getMerchantRoot(rule.originalDescription);
+
+        if (!grouped[groupKey]) grouped[groupKey] = [];
+        grouped[groupKey].push(rule);
+      });
+
+      Object.entries(grouped).forEach(([groupKey, rules]) => {
+        const button = document.createElement("button");
+        button.className = "accordion";
+        button.innerHTML = `
+          <div class="group-header">
+            <span>${groupKey} (${rules.length})</span>
+            <span class="toggle-group" onclick="toggleGroup(this, '${groupKey}')">[Uncheck All]</span>
+          </div>`;
+        button.onclick = function () {
+          this.classList.toggle("active");
+          const panel = this.nextElementSibling;
+          panel.style.display = panel.style.display === "block" ? "none" : "block";
+        };
+        container.appendChild(button);
+
+        const panel = document.createElement("div");
+        panel.className = "panel";
+        panel.id = `panel_${groupKey}`;
+
+        rules.forEach(rule => {
+          const el = document.createElement("div");
+          el.className = "rule";
+          el.innerHTML = `
+            <label class="checkbox-label">
+              <input type="checkbox" id="check_${rule.index}" ${rule.checked ? 'checked' : ''} onchange="suggestions[${rule.index}].checked = this.checked">
+              ✅ Include
+            </label>
+            <label><strong>Category:</strong>
+              <input id="cat_${rule.index}" value="${rule.category}" oninput="suggestions[${rule.index}].category = this.value">
+            </label>
+            <label><strong>Description Contains:</strong>
+              <input id="desc_${rule.index}" value="${rule.displayDescription}" oninput="suggestions[${rule.index}].displayDescription = this.value">
+            </label>
+            <small>
+              🔍 Matches ${rule.matchCount} transaction(s)<br>
+              🎯 Matched Rule: <em>${rule.matchedRule}</em>
+            </small>
+          `;
+          panel.appendChild(el);
+        });
+
+        container.appendChild(panel);
+      });
+    }
+ 
+    function toggleGroup(element, groupKey) {
+      const panel = document.getElementById(`panel_${groupKey}`);
+      const checkboxes = panel.querySelectorAll('input[type="checkbox"]');
+      const shouldCheck = element.innerText.includes("Check");
+      checkboxes.forEach(cb => cb.checked = shouldCheck);
+      suggestions.forEach(s => {
+        if (panel.contains(document.getElementById(`check_${s.index}`))) {
+          s.checked = shouldCheck;
+        }
+      });
+      element.innerText = shouldCheck ? "[Uncheck All]" : "[Check All]";
+    }
+
+    function getSelectedRules() {
+      const clean = document.getElementById("cleanDescriptions").checked;
+      const removeLoc = document.getElementById("removeLocations").checked;
+      return suggestions
+        .filter(r => r.checked)
+        .map(r => ({
+          category: r.category,
+          description: clean ? cleanDescription(r.displayDescription, removeLoc) : r.displayDescription
+        }))
+        .filter(r => r.category && r.description);
+    }
+
+    function saveSelected() {
+      const toAdd = getSelectedRules();
+      if (toAdd.length === 0) return alert("No rules selected.");
+      google.script.run.withSuccessHandler(msg => {
+        alert(msg);
+        loadSuggestions();
+      }).addRulesToAutoCat(toAdd);
+    }
+
+    function skipSelected() {
+      const toSkip = suggestions
+        .filter(r => !r.checked)
+        .map(r => ({
+          category: r.category,
+          description: r.displayDescription
+        }));
+      if (toSkip.length === 0) return alert("No rules marked as skipped.");
+      google.script.run.withSuccessHandler(msg => {
+        alert(msg);
+        loadSuggestions();
+      }).skipAutoCatRules(toSkip);
+    }
+
+    function mergeRules() {
+      google.script.run.withSuccessHandler(msg => {
+        alert(msg);
+      }).mergeProposedRules();
+    }
+
+    loadSuggestions();
+  </script>
+</body>
+</html>

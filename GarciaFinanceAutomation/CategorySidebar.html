@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top" />
+  <style>
+    body { font-family: Arial, sans-serif; padding: 10px; }
+    h3 { margin-top: 0; }
+    input {
+      width: 100%;
+      margin-bottom: 10px;
+      padding: 6px;
+    }
+    button {
+      width: 100%;
+      padding: 10px;
+      background: #1a73e8;
+      color: white;
+      font-weight: bold;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-top: 6px;
+    }
+    .desc-preview {
+      background: #f1f1f1;
+      padding: 8px;
+      border-radius: 4px;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h3>💡 Suggest Category</h3>
+
+  <label>Description:</label>
+  <div id="descText" class="desc-preview">Loading...</div>
+
+  <button onclick="searchCategory()">🔍 Search for Category</button>
+
+  <label for="customCategory">Enter category after search:</label>
+  <input type="text" id="customCategory" placeholder="Suggested category" />
+
+  <button onclick="saveCategory()">💾 Save Category</button>
+
+  <script>
+    let currentDescription = "";
+
+    function loadSidebar() {
+      google.script.run.withSuccessHandler(data => {
+        currentDescription = data.description || "";
+        document.getElementById('descText').innerText = currentDescription || '(No description)';
+        document.getElementById('customCategory').value = '';
+      }).getCategorySidebarData();
+    }
+
+    function searchCategory() {
+      if (!currentDescription) {
+        alert("No description found.");
+        return;
+      }
+      const query = encodeURIComponent(`${currentDescription} transaction category site:reddit.com OR site:quora.com`);
+      const url = `https://www.google.com/search?q=${query}`;
+      window.open(url, '_blank');
+    }
+
+    function saveCategory() {
+      const category = document.getElementById('customCategory').value.trim();
+      if (!category) {
+        alert("Please enter a category.");
+        return;
+      }
+      google.script.run.saveSuggestedCategory(category);
+      alert("Category saved!");
+    }
+
+    loadSidebar();
+    document.addEventListener("selectionchange", () => setTimeout(loadSidebar, 250));
+  </script>
+</body>
+</html>

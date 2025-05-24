@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top" />
+    <style>
+      body {
+        font-family: "Google Sans", Roboto, Arial, sans-serif;
+        font-size: 13px;
+        padding: 16px;
+        color: #202124;
+      }
+      h2 {
+        font-size: 16px;
+        margin-top: 0;
+      }
+      label {
+        font-weight: 500;
+        margin-top: 10px;
+        display: block;
+      }
+      input, select, textarea, button {
+        width: 100%;
+        font-size: 13px;
+        margin-top: 4px;
+        margin-bottom: 10px;
+        padding: 6px;
+        box-sizing: border-box;
+        border-radius: 4px;
+        border: 1px solid #ccc;
+      }
+      select[multiple] {
+        height: 80px;
+      }
+      button {
+        font-weight: 600;
+        background-color: #3367d6;
+        color: white;
+        border: none;
+        cursor: pointer;
+      }
+      button:hover {
+        background-color: #254f9d;
+      }
+      #output {
+        margin-top: 1em;
+        font-family: monospace;
+        white-space: pre-wrap;
+      }
+      .action-buttons button {
+        margin-top: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>🧳 Event Tag Manager</h2>
+
+    <label for="eventPicker">Select Event</label>
+    <select id="eventPicker">
+      <option value="">-- Select an Event --</option>
+    </select>
+
+    <div class="action-buttons">
+      <button onclick="runAction('apply')">✅ Apply Tags</button>
+      <button onclick="runAction('onlyIfMissing')">❓ Apply If Missing</button>
+      <button onclick="runAction('preview')">🔍 Preview Matches</button>
+      <button onclick="runAction('clear')">🧹 Clear Tags</button>
+    </div>
+
+    <div id="output"></div>
+
+    <form id="eventForm">
+      <label>Event Name</label>
+      <input type="text" id="eventName" required />
+
+      <label>Start Date</label>
+      <input type="date" id="startDate" required />
+
+      <label>End Date</label>
+      <input type="date" id="endDate" required />
+
+      <label>Accounts Used</label>
+      <select id="accountsUsed" multiple></select>
+
+      <label>Event Tag</label>
+      <input type="text" id="tag" required />
+
+      <label>Description</label>
+      <textarea id="description"></textarea>
+
+      <label>Categories</label>
+      <select id="categories" multiple></select>
+
+      <label>Exclude Tags</label>
+      <input type="text" id="excludeTags" />
+
+      <button type="submit">💾 Save Event</button>
+    </form>
+
+    <script>
+      let allEvents = [];
+
+      function runAction(action) {
+        const tag = document.getElementById("eventPicker").selectedOptions[0]?.dataset.tag;
+        if (!tag) {
+          document.getElementById("output").textContent = "⚠️ Please select an event.";
+          return;
+        }
+
+        const output = document.getElementById("output");
+        const buttons = document.querySelectorAll(".action-buttons button");
+
+        // Disable buttons and set loading state
+        buttons.forEach(btn => {
+          btn.disabled = true;
+          if (btn.textContent.includes("Apply")) btn.textContent = "⏳ Applying...";
+          else if (btn.textContent.includes("Missing")) btn.textContent = "⏳ Checking...";
+          else if (btn.textContent.includes("Preview")) btn.textContent = "⏳ Previewing...";
+          else if (btn.textContent.includes("Clear")) btn.textContent = "⏳ Clearing...";
+        });
+
+        output.textContent = `⏳ Running '${action}' for '${tag}'...`;
+
+        google.script.run
+          .withSuccessHandler(msg => {
+            output.textContent = msg;
+            google.script.run.showToast(msg);
+            resetButtons();
+          })
+          .withFailureHandler(err => {
+            output.textContent = "❌ Error: " + err.message;
+            alert("❌ Event tagging failed.\n\n" + err.message);
+            resetButtons();
+          })
+          .handleEventTagAction(tag, action); // ✅ Correct function call
+      }
+
+      function resetButtons() {
+        const buttons = document.querySelectorAll(".action-buttons button");
+        buttons[0].textContent = "✅ Apply Tags";
+        buttons[1].textContent = "❓ Apply If Missing";
+        buttons[2].textContent = "🔍 Preview Matches";
+        buttons[3].textContent = "🧹 Clear Tags";
+        buttons.forEach(btn => btn.disabled = false);
+      }
+
+      function loadEvents() {
+        google.script.run
+          .withSuccessHandler(events => {
+            const picker = document.getElementById("eventPicker");
+            picker.innerHTML = `<option value="">-- Select an Event --</option>`;
+            allEvents = Array.isArray(events) ? events : [];
+
+            allEvents.forEach((row, index) => {
+              const name = row[0] || "Unnamed";
+              const tag = row[4] || "";
+              const opt = document.createElement("option");
+              opt.value = index;
+              opt.dataset.tag = tag;
+              opt.textContent = `${name} [${tag}]`;
+              picker.appendChild(opt);
+            });
+          })
+          .withFailureHandler(error => {
+            document.getElementById("output").textContent = "❌ Failed to load events.";
+          })
+          .getEventTagData();
+      }
+
+      document.getElementById("eventPicker").onchange = function () {
+        const selectedIndex = this.value;
+        if (selectedIndex !== "") {
+          populateForm(allEvents[selectedIndex]);
+        } else {
+          document.getElementById("eventForm").reset();
+        }
+      };
+
+      function populateForm(row) {
+        document.getElementById("eventName").value = row[0] || "";
+        document.getElementById("startDate").value = formatDate(row[1]);
+        document.getElementById("endDate").value = formatDate(row[2]);
+        setMultiSelect("accountsUsed", row[3]);
+        document.getElementById("tag").value = row[4] || "";
+        document.getElementById("description").value = row[5] || "";
+        setMultiSelect("categories", row[6]);
+        document.getElementById("excludeTags").value = row[7] || "";
+      }
+
+      function formatDate(d) {
+        const date = new Date(d);
+        return isNaN(date) ? "" : date.toISOString().slice(0, 10);
+      }
+
+      function setMultiSelect(id, csv) {
+        const select = document.getElementById(id);
+        const values = (csv || "").split(",").map(v => v.trim());
+        Array.from(select.options).forEach(opt => {
+          opt.selected = values.includes(opt.value);
+        });
+      }
+
+      document.getElementById("eventForm").onsubmit = function (e) {
+        e.preventDefault();
+
+        const selectedAccounts = Array.from(document.getElementById("accountsUsed").selectedOptions)
+          .map(opt => opt.value).join(", ");
+        const selectedCategories = Array.from(document.getElementById("categories").selectedOptions)
+          .map(opt => opt.value).join(", ");
+
+        const data = {
+          eventName: document.getElementById("eventName").value,
+          startDate: document.getElementById("startDate").value,
+          endDate: document.getElementById("endDate").value,
+          accountsUsed: selectedAccounts,
+          tag: document.getElementById("tag").value,
+          description: document.getElementById("description").value,
+          categories: selectedCategories,
+          excludeTags: document.getElementById("excludeTags").value
+        };
+
+        google.script.run.withSuccessHandler(() => {
+          document.getElementById("eventForm").reset();
+          document.getElementById("eventPicker").value = "";
+          loadEvents();
+          document.getElementById("output").textContent = "✅ Event saved.";
+        }).saveOrUpdateEvent(data);
+      };
+
+      function populateAccountsAndCategories() {
+        google.script.run.withSuccessHandler(({ accounts, categories }) => {
+          const accSelect = document.getElementById("accountsUsed");
+          const catSelect = document.getElementById("categories");
+          accSelect.innerHTML = "";
+          catSelect.innerHTML = "";
+
+          accounts.forEach(acc => {
+            const opt = document.createElement("option");
+            opt.value = acc;
+            opt.textContent = acc;
+            accSelect.appendChild(opt);
+          });
+
+          categories.forEach(cat => {
+            const opt = document.createElement("option");
+            opt.value = cat;
+            opt.textContent = cat;
+            catSelect.appendChild(opt);
+          });
+        }).getAccountsAndCategories();
+      }
+
+      populateAccountsAndCategories();
+      loadEvents();
+
+      // Catch JS errors
+      window.onerror = function(message) {
+        document.getElementById("output").textContent = "❌ JS Error: " + message;
+      };
+    </script>
+  </body>
+</html>

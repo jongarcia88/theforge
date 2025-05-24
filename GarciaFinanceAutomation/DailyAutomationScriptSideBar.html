@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    :root {
+      --tiller-blue: #3c78d8;
+      --light-gray: #f4f4f4;
+      --border-gray: #dcdcdc;
+      --text-gray: #555;
+    }
+
+    body {
+      font-family: Roboto, Arial, sans-serif;
+      font-size: 13px;
+      background-color: #ffffff;
+      padding: 16px;
+      color: var(--text-gray);
+    }
+
+    h2 {
+      color: var(--tiller-blue);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+    }
+
+    th, td {
+      padding: 6px;
+      border-bottom: 1px solid var(--border-gray);
+      text-align: left;
+    }
+
+    input[type="text"], select, input[type="number"] {
+      font-size: 13px;
+      padding: 4px;
+      margin: 4px 0;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    button {
+      background-color: var(--tiller-blue);
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      font-weight: bold;
+      border-radius: 4px;
+      margin: 6px 6px 0 0;
+      cursor: pointer;
+    }
+
+    .secondary {
+      background-color: var(--light-gray);
+      color: var(--text-gray);
+      border: 1px solid var(--border-gray);
+    }
+
+    .remove-btn {
+      color: red;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .success { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h2>🛠️ Daily Automation Scheduler</h2>
+
+  <label>Step Description:</label>
+  <input type="text" id="stepDescription" placeholder="e.g., Clean up AutoCat rules">
+  
+  <label>Script Function to Call:</label>
+  <select id="stepFunction"></select>
+
+  <button onclick="addCustomStep()">➕ Add Step</button>
+
+  <table id="configTable">
+    <thead>
+      <tr>
+        <th>Description</th>
+        <th>Function</th>
+        <th>Retries</th>
+        <th>Remove</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <button onclick="saveConfig()">💾 Save</button>
+  <button onclick="runNow(false)">▶️ Run Once</button>
+  <button onclick="runNow(true)">🧪 Test Run</button>
+  <button onclick="installTrigger()">⏰ Set Daily Trigger</button>
+  <button onclick="uninstallTrigger()" class="secondary">❌ Remove Trigger</button>
+
+  <div id="output"></div>
+
+  <script>
+    let availableFunctions = [];
+    let config = [];
+
+    function load() {
+      google.script.run.withSuccessHandler(funcs => {
+        availableFunctions = funcs;
+        const dropdown = document.getElementById("stepFunction");
+        dropdown.innerHTML = funcs.map(f => `<option value="${f}">${f}</option>`).join("");
+      }).getAvailableFunctions();
+
+      google.script.run.withSuccessHandler(conf => {
+        config = conf;
+        renderConfig();
+      }).getSavedSchedulerConfig();
+    }
+
+    function addCustomStep() {
+      const desc = document.getElementById("stepDescription").value.trim();
+      const func = document.getElementById("stepFunction").value;
+
+      if (!desc || !func) return;
+
+      config.push({
+        name: desc,
+        id: func,
+        retries: 1,
+        order: config.length + 1
+      });
+
+      document.getElementById("stepDescription").value = "";
+      renderConfig();
+    }
+
+    function removeScript(id) {
+      config = config.filter(c => c.id !== id);
+      renderConfig();
+    }
+
+    function updateRetries(id, val) {
+      const step = config.find(c => c.id === id);
+      if (step) step.retries = parseInt(val);
+    }
+
+    function renderConfig() {
+      const tbody = document.querySelector("#configTable tbody");
+      tbody.innerHTML = config.map((c, i) => `
+        <tr draggable="true" data-id="${c.id}">
+          <td>${c.name}</td>
+          <td>${c.id}</td>
+          <td><input type="number" value="${c.retries}" min="0" onchange="updateRetries('${c.id}', this.value)"></td>
+          <td><span class="remove-btn" onclick="removeScript('${c.id}')">✖</span></td>
+        </tr>
+      `).join("");
+
+      enableDragAndDrop();
+    }
+
+    function enableDragAndDrop() {
+      const rows = document.querySelectorAll("tr[draggable]");
+      rows.forEach(row => {
+        row.addEventListener("dragstart", (e) => {
+          e.dataTransfer.setData("text/plain", e.target.dataset.id);
+        });
+
+        row.addEventListener("dragover", (e) => {
+          e.preventDefault();
+          e.currentTarget.classList.add("drag-over");
+        });
+
+        row.addEventListener("dragleave", (e) => {
+          e.currentTarget.classList.remove("drag-over");
+        });
+
+        row.addEventListener("drop", (e) => {
+          e.preventDefault();
+          const fromId = e.dataTransfer.getData("text/plain");
+          const toId = e.currentTarget.dataset.id;
+          reorderConfig(fromId, toId);
+        });
+      });
+    }
+
+    function reorderConfig(fromId, toId) {
+      const fromIndex = config.findIndex(c => c.id === fromId);
+      const toIndex = config.findIndex(c => c.id === toId);
+      if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) return;
+
+      const moved = config.splice(fromIndex, 1)[0];
+      config.splice(toIndex, 0, moved);
+      config.forEach((c, i) => c.order = i + 1);
+      renderConfig();
+    }
+
+    function saveConfig() {
+      google.script.run.withSuccessHandler(() => {
+        document.getElementById("output").innerHTML = "<p class='success'>✅ Config saved!</p>";
+      }).saveSchedulerConfig(config);
+    }
+
+    function runNow(isTest) {
+      document.getElementById("output").innerHTML = "<p>Running...</p>";
+      google.script.run.withSuccessHandler(result => {
+        document.getElementById("output").innerHTML = `
+          <h4>Result:</h4>
+          <ul>${result.map(r => `
+            <li>
+              <strong>${r.step}</strong>: ${r.success ? "<span class='success'>Success</span>" : "<span class='fail'>Fail</span>"} 
+              - ${r.detail} ${r.error ? "⚠️ " + r.error : ""}
+            </li>`).join("")}
+          </ul>`;
+      }).runAutomationOnce(isTest);
+    }
+
+    function installTrigger() {
+      google.script.run.installSchedulerTrigger();
+      document.getElementById("output").innerHTML = "<p class='success'>✅ Daily trigger installed!</p>";
+    }
+
+    function uninstallTrigger() {
+      google.script.run.uninstallSchedulerTrigger();
+      document.getElementById("output").innerHTML = "<p class='fail'>❌ Daily trigger removed.</p>";
+    }
+
+    load();
+  </script>
+</body>
+</html>
