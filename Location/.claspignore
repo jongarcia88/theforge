@@ -1,0 +1,18 @@
+# Ignore everything first
+**
+
+# Allow script and config files
+!appsscript.json
+!*.js
+!*.ts
+
+# Allow subfolders if you store scripts in them (adjust as needed)
+!src/**
+!lib/**
+
+# Never push Git-related files
+.git/**
+.gitignore
+
+# Never push node modules
+node_modules/**

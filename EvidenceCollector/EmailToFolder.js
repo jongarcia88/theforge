@@ -1,7 +1,7 @@
 const ALIAS              = 'garcia.jonathan+evidence@gmail.com';
 const EVIDENCE_FOLDER_ID = '1qdlv2s8bGildbB0GWyQzzoQFo5YrAYzH';
 const LOG_SHEET_ID       = '1HRFI5x6dbTkknGhX7hCrTit-Q-SwSwR_vmLwJe_OfH4';
-const PROCESSED_LABEL    = 'Evidence-Processed';
+const AAPROCESSED_LABEL    = 'Evidence-Processed';
 const LOG_SHEET_NAME     = 'Evidence Log';
 
 

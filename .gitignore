@@ -1,14 +1,12 @@
-# Ignore clasp project binding (each dev sets this locally)
-.clasp.json
+# Ignore clasp config files (each project’s local link to Google)
+**/.clasp.json
 
-# Node modules, if you install any
-node_modules/
+# Ignore node modules (if any)
+**/node_modules/
 
-# macOS system files
+# Ignore system junk files
 .DS_Store
-
-# Windows system files
 Thumbs.db
 
-# Log files or temporary data (if any)
+# Ignore log files or temp files across all folders
 *.log
